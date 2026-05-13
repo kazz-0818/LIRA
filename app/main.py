@@ -246,6 +246,8 @@ def post_ask(body: AskBody, repo: RepoDep):
         "ask",
         {"intent": structured.get("intent"), "month": month},
     )
+    if structured.get("intent") == "greeting":
+        return {"mode": "rules", **structured}
     s = get_settings()
     if s.openai_api_key:
         try:

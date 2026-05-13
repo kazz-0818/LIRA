@@ -13,6 +13,11 @@ log = logging.getLogger(__name__)
 
 def _fallback_text(structured: dict) -> str:
     intent = structured.get("intent", "unknown")
+    if intent == "greeting":
+        return (
+            "LIRA 経理部です。こんにちは。\n"
+            "「今月の売上」「入金予定」「未入金」「支払い予定」など、知りたいことを送ってください。"
+        )
     if intent == "summary":
         d = structured.get("data") or {}
         if not d.get("found"):
@@ -30,21 +35,29 @@ def _fallback_text(structured: dict) -> str:
     if intent in ("payment_received", "overdue_reminder"):
         n = structured.get("count", 0)
         return (
-            f"（ルール応答）{intent} 関連データ {n} 件です。"
-            "詳細は /docs の API を参照ください。"
+            f"（ルール応答）{intent} 関連データ {n} 件です。" "詳細は /docs の API を参照ください。"
         )
     return "（ルール応答）売上・入金・支払・未入金・月次 などのキーワードで質問してください。"
 
 
 def answer_for_user(question: str, repo: SheetRepository) -> str:
     """人が読む自然文。OpenAI が使えなければルールベースの短文。"""
-    month = month_from_question(question)
-    structured = run_rules_ask(question, repo, month)
-    s = get_settings()
-    if s.openai_api_key:
-        try:
-            ctx = build_accounting_context(repo, month)
-            return answer_with_openai(question, ctx)
-        except Exception:
-            log.exception("OpenAI 応答失敗、フォールバックします")
-    return _fallback_text(structured)
+    try:
+        month = month_from_question(question)
+        structured = run_rules_ask(question, repo, month)
+        if structured.get("intent") == "greeting":
+            return _fallback_text(structured)
+        s = get_settings()
+        if s.openai_api_key:
+            try:
+                ctx = build_accounting_context(repo, month)
+                return answer_with_openai(question, ctx)
+            except Exception:
+                log.exception("OpenAI 応答失敗、フォールバックします")
+        return _fallback_text(structured)
+    except Exception:
+        log.exception("LINE / answer_for_user: Sheets または処理エラー")
+        return (
+            "経理シートへの接続でエラーが出ました（認証・SPREADSHEET_ID・シート名を確認してください）。\n"
+            "「売上」「入金」「未入金」など短いキーワードでもう一度お試しください。"
+        )

@@ -7,6 +7,10 @@ from typing import Any
 from app.services import SheetRepository
 
 _MONTH_RE = re.compile(r"(20\d{2})[-年/](\d{1,2})")
+_GREETING_RE = re.compile(
+    r"^(こんにちは|こんちゃ|こんばんは|おはよう|おはよ|はろー|やあ|よう|hello|hi)\s*[!！。]*$",
+    re.IGNORECASE,
+)
 
 
 def extract_month(question: str) -> str | None:
@@ -18,8 +22,12 @@ def extract_month(question: str) -> str | None:
 
 
 def route_question(question: str, repo: SheetRepository) -> dict[str, Any]:
+    """意図のざっくり分類。Sheets への重い取得は run_rules_ask 側に寄せる（ここでは呼ばない）。"""
     q = question.strip()
     month = extract_month(q) or f"{date.today().year:04d}-{date.today().month:02d}"
+
+    if _GREETING_RE.match(q):
+        return {"intent": "greeting", "month": month}
 
     if any(k in q for k in ("督促", "遅延", "延滞", "未入金", "overdue")):
         rows = [r for r in repo.load_receivables() if r.is_unpaid()]
@@ -36,7 +44,11 @@ def route_question(question: str, repo: SheetRepository) -> dict[str, Any]:
     if any(k in q for k in ("支払", "買掛", "payable")):
         return {"intent": "payables", "count": len(repo.load_payables())}
 
-    if any(k in q for k in ("入金予定", "売掛", "レシーバブル", "receivable")):
+    if any(k in q for k in ("入金予定", "売掛", "レシーバブル", "receivable")) or (
+        "入金" in q
+        and "未入金" not in q
+        and not any(k in q for k in ("入金確認", "入金済", "振込済", "支払いました"))
+    ):
         return {"intent": "receivables", "count": len(repo.load_receivables())}
 
     if any(
@@ -51,12 +63,7 @@ def route_question(question: str, repo: SheetRepository) -> dict[str, Any]:
             "summary",
         )
     ):
-        s = repo.summary_for_month(month)
-        return {
-            "intent": "summary",
-            "month": month,
-            "found": s is not None,
-        }
+        return {"intent": "summary", "month": month}
 
     return {
         "intent": "unknown",

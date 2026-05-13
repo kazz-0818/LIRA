@@ -16,6 +16,9 @@ def run_rules_ask(question: str, repo: SheetRepository, month: str) -> dict[str,
     route = route_question(question, repo)
     intent = route["intent"]
 
+    if intent == "greeting":
+        return {"intent": "greeting"}
+
     if intent == "summary":
         s = repo.summary_for_month(month)
         return {
