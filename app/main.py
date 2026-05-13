@@ -171,6 +171,9 @@ def get_unpaid(repo: RepoDep):
 @app.get("/integrations/status")
 def integrations_status() -> dict[str, bool]:
     s = get_settings()
+    google = bool((s.google_service_account_json or "").strip()) or bool(
+        (s.google_application_credentials or "").strip()
+    )
     return {
         "openai_configured": bool(s.openai_api_key),
         "supabase_configured": bool(
@@ -178,6 +181,7 @@ def integrations_status() -> dict[str, bool]:
         ),
         "line_webhook_configured": bool(s.line_channel_secret and s.line_channel_access_token),
         "public_app_url_configured": bool(s.public_app_url),
+        "google_credentials_configured": google,
     }
 
 
@@ -241,7 +245,17 @@ class AskBody(BaseModel):
 @app.post("/ask")
 def post_ask(body: AskBody, repo: RepoDep):
     month = month_from_question(body.question)
-    structured = run_rules_ask(body.question, repo, month)
+    try:
+        structured = run_rules_ask(body.question, repo, month)
+    except Exception:
+        log.exception("POST /ask: Sheets 読み取り失敗")
+        return {
+            "mode": "error",
+            "message": (
+                "スプレッドシートの読み取りに失敗しました。"
+                "認証・SPREADSHEET_ID・シート名を確認してください。"
+            ),
+        }
     log_audit(
         "ask",
         {"intent": structured.get("intent"), "month": month},

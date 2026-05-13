@@ -29,27 +29,35 @@ def _verify_signature(channel_secret: str, body: bytes, signature: str | None) -
     return hmac.compare_digest(expected, signature)
 
 
-async def _reply_line(reply_token: str, text: str) -> None:
+async def _reply_line(reply_token: str, text: str) -> bool:
+    """返信 API を叩く。失敗しても例外は出さない（Webhook 本体は 200 を返すため）。"""
     s = get_settings()
     token = s.line_channel_access_token
     if not token:
-        raise HTTPException(503, "LINE_CHANNEL_ACCESS_TOKEN が未設定です。")
+        log.warning("LINE_CHANNEL_ACCESS_TOKEN 未設定のため返信できません")
+        return False
     payload: dict[str, Any] = {
         "replyToken": reply_token,
         "messages": [{"type": "text", "text": text[:4800]}],
     }
-    async with httpx.AsyncClient() as client:
-        r = await client.post(
-            "https://api.line.me/v2/bot/message/reply",
-            headers={
-                "Authorization": f"Bearer {token}",
-                "Content-Type": "application/json",
-            },
-            json=payload,
-            timeout=45.0,
-        )
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.post(
+                "https://api.line.me/v2/bot/message/reply",
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+                timeout=45.0,
+            )
         if r.status_code >= 400:
             log.warning("LINE reply API: %s %s", r.status_code, r.text[:500])
+            return False
+    except Exception:
+        log.exception("LINE reply API 通信エラー")
+        return False
+    return True
 
 
 async def handle_line_webhook(request: Request) -> dict[str, str]:
@@ -61,6 +69,9 @@ async def handle_line_webhook(request: Request) -> dict[str, str]:
     sig = request.headers.get("X-Line-Signature")
     if not _verify_signature(s.line_channel_secret, body, sig):
         raise HTTPException(400, "Invalid signature")
+
+    if not body.strip():
+        return {}
 
     try:
         data = json.loads(body.decode("utf-8"))

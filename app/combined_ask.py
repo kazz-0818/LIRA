@@ -35,7 +35,8 @@ def _fallback_text(structured: dict) -> str:
     if intent in ("payment_received", "overdue_reminder"):
         n = structured.get("count", 0)
         return (
-            f"（ルール応答）{intent} 関連データ {n} 件です。" "詳細は /docs の API を参照ください。"
+            f"（ルール応答）{intent} 関連データ {n} 件です。\n"
+            "詳細は /docs の API を参照ください。"
         )
     return "（ルール応答）売上・入金・支払・未入金・月次 などのキーワードで質問してください。"
 

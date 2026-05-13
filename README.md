@@ -135,7 +135,7 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 | POST | `/reports/monthly` | 月次レポート文（`audience`: `internal` / `client`） |
 | POST | `/messages/payment-received` | 入金確認文（任意で `sheet_row_indices`） |
 | POST | `/messages/overdue-reminder` | 督促文（任意で `sheet_row_indices`） |
-| GET | `/integrations/status` | OpenAI / Supabase / LINE が設定済みか（値は返さない） |
+| GET | `/integrations/status` | OpenAI / Supabase / LINE / Google 認証の有無（値は返さない） |
 | POST | `/line/webhook` / `/webhook` / `/webhook/line` | LINE（同一処理） |
 | POST | `/ask` | OpenAI があれば自然文 `answer` + `structured`、なければ従来のルール結果のみ |
 

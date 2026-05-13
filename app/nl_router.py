@@ -22,7 +22,7 @@ def extract_month(question: str) -> str | None:
 
 
 def route_question(question: str, repo: SheetRepository) -> dict[str, Any]:
-    """意図のざっくり分類。Sheets への重い取得は run_rules_ask 側に寄せる（ここでは呼ばない）。"""
+    """意図のざっくり分類。summary の月次行取得だけは run_rules_ask に任せ、ここでは呼ばない。"""
     q = question.strip()
     month = extract_month(q) or f"{date.today().year:04d}-{date.today().month:02d}"
 
