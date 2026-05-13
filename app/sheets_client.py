@@ -44,3 +44,19 @@ def fetch_range(service, spreadsheet_id: str, a1_range: str) -> list[list[Any]]:
         service.spreadsheets().values().get(spreadsheetId=spreadsheet_id, range=a1_range).execute()
     )
     return result.get("values", [])
+
+
+def list_sheet_titles(service, spreadsheet_id: str) -> list[str]:
+    """ブック内タブ名（表示名）を、左から順に返す。"""
+    meta = (
+        service.spreadsheets()
+        .get(spreadsheetId=spreadsheet_id, fields="sheets.properties.title")
+        .execute()
+    )
+    out: list[str] = []
+    for sh in meta.get("sheets", []):
+        props = sh.get("properties") or {}
+        title = props.get("title")
+        if title is not None:
+            out.append(str(title))
+    return out

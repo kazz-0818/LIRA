@@ -22,8 +22,9 @@ def format_sheets_user_message(exc: BaseException) -> str:
         if status == 400:
             return (
                 "Sheets API がリクエスト不正と判断しました（400）。\n"
-                "シート名（SHEET_SUMMARY / SHEET_RECEIVABLES / SHEET_PAYABLES）の"
-                "スペル・全角半角を実シートと一致させてください。"
+                "シート範囲の指定が無効なことが多いです。LIRA はタブ一覧から名前を推測しますが、"
+                "合わない場合は SHEET_SUMMARY / SHEET_RECEIVABLES / SHEET_PAYABLES を"
+                "実タブ名に合わせてください。"
             )
         return (
             f"Google Sheets API でエラーになりました（HTTP {status}）。\n"
@@ -37,6 +38,18 @@ def format_sheets_user_message(exc: BaseException) -> str:
                 "Google のサービスアカウント認証が設定されていません。\n"
                 "Render では GOOGLE_SERVICE_ACCOUNT_JSON（JSON 全文）、"
                 "または GOOGLE_APPLICATION_CREDENTIALS（ファイルパス）を設定してください。"
+            )
+        if "シートの自動判定に失敗" in text:
+            return (
+                "どのタブを月次・入金・支払用として読むか、自動判定できませんでした。\n"
+                f"{text}\n"
+                "タブ名に「月次」「サマリー」「入金」「支払」などが含まれるか確認するか、"
+                "環境変数 SHEET_* に実タブ名をそのまま設定してください。"
+            )
+        if "スプレッドシートにタブ（シート）が1枚もありません" in text:
+            return (
+                "スプレッドシートにタブ（シート）が1枚もありません。\n"
+                "正しいブックを開いているか、SPREADSHEET_ID を確認してください。"
             )
         if "GOOGLE_SERVICE_ACCOUNT_JSON が有効な JSON" in text:
             return (

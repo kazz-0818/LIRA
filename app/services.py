@@ -14,7 +14,8 @@ from app.mapping import (
     row_to_receivable,
     rows_to_dicts,
 )
-from app.sheets_client import build_sheets_service, fetch_range
+from app.sheet_resolve import resolve_effective_sheet_names
+from app.sheets_client import build_sheets_service, fetch_range, list_sheet_titles
 
 
 def _escape_sheet(name: str) -> str:
@@ -33,6 +34,10 @@ class SheetRepository:
     def __init__(self, settings: Settings | None = None):
         self.settings = settings or get_settings()
         self._service = build_sheets_service()
+        titles = list_sheet_titles(self._service, self.settings.spreadsheet_id)
+        self._sheet_summary, self._sheet_receivables, self._sheet_payables = (
+            resolve_effective_sheet_names(self.settings, titles)
+        )
 
     def _read_sheet(self, sheet_name: str) -> list[dict[str, Any]]:
         return [row for _, row in self._read_sheet_with_row_numbers(sheet_name)]
@@ -53,7 +58,7 @@ class SheetRepository:
 
     def load_summary_rows(self) -> list[MonthlySummaryRow]:
         out: list[MonthlySummaryRow] = []
-        for row in self._read_sheet(self.settings.sheet_summary):
+        for row in self._read_sheet(self._sheet_summary):
             m = row_to_monthly_summary(row)
             if m:
                 out.append(m)
@@ -66,13 +71,13 @@ class SheetRepository:
         return None
 
     def load_receivables(self) -> list[ReceivableRow]:
-        sheet = self.settings.sheet_receivables
+        sheet = self._sheet_receivables
         return [
             row_to_receivable(num, row) for num, row in self._read_sheet_with_row_numbers(sheet)
         ]
 
     def load_payables(self) -> list[PayableRow]:
-        sheet = self.settings.sheet_payables
+        sheet = self._sheet_payables
         return [row_to_payable(num, row) for num, row in self._read_sheet_with_row_numbers(sheet)]
 
 
