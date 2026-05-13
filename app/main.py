@@ -48,8 +48,9 @@ def _fastapi_kwargs() -> dict:
 
 app = FastAPI(**_fastapi_kwargs())
 app.include_router(line_router)
-# LINE Developers でよくある「/webhook」のみの URL でも 404 にしない
+# LINE Webhook よくあるパス揺れ（404 防止）
 app.add_api_route("/webhook", handle_line_webhook, methods=["POST"], tags=["line"])
+app.add_api_route("/webhook/line", handle_line_webhook, methods=["POST"], tags=["line"])
 
 log = logging.getLogger(__name__)
 
