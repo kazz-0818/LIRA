@@ -1,0 +1,11 @@
+# LIRA MVP — pinned for reproducible installs
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+google-api-python-client==2.159.0
+google-auth==2.37.0
+pydantic-settings==2.7.0
+python-dotenv==1.0.1
+python-dateutil==2.9.0.post0
+openai==1.59.7
+supabase==2.11.0
+httpx==0.28.1

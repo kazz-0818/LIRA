@@ -1,0 +1,13 @@
+.env
+.env.local
+.env.bak
+.ruff_cache/
+env/.env
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+*-service-account*.json
+credentials.json
