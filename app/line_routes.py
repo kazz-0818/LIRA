@@ -15,6 +15,7 @@ from app.audit_supabase import log_audit
 from app.combined_ask import answer_for_user
 from app.config import get_settings
 from app.services import SheetRepository
+from app.sheets_errors import format_sheets_user_message
 
 log = logging.getLogger(__name__)
 
@@ -96,16 +97,23 @@ async def handle_line_webhook(request: Request) -> dict[str, str]:
         try:
             text_out = await run_in_threadpool(_work)
             await _reply_line(reply_token, text_out)
-            log_audit("line_webhook", {"question_len": len(q)})
-        except Exception:
+        except Exception as e:
             log.exception("LINE webhook 処理エラー")
+            detail = format_sheets_user_message(e)
+            err_reply = (
+                f"{detail}\n\n"
+                "「売上」「入金」「未入金」など短いキーワードでもう一度お試しください。\n"
+                "改善しない場合は時間をおいて再試行してください。"
+            )
             try:
-                await _reply_line(
-                    reply_token,
-                    "LIRA でエラーが発生しました。しばらくしてからもう一度お試しください。",
-                )
+                await _reply_line(reply_token, err_reply)
             except Exception:
                 log.exception("LINE エラー返信も失敗")
+        else:
+            try:
+                log_audit("line_webhook", {"question_len": len(q)})
+            except Exception:
+                log.exception("監査ログ（Supabase）の記録に失敗しました（返信は済み）")
 
     return {}
 
