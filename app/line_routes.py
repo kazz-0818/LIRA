@@ -52,8 +52,7 @@ async def _reply_line(reply_token: str, text: str) -> None:
             log.warning("LINE reply API: %s %s", r.status_code, r.text[:500])
 
 
-@router.post("/webhook")
-async def line_webhook(request: Request) -> dict[str, str]:
+async def handle_line_webhook(request: Request) -> dict[str, str]:
     s = get_settings()
     if not s.line_channel_secret:
         raise HTTPException(503, "LINE_CHANNEL_SECRET が未設定です。")
@@ -98,3 +97,8 @@ async def line_webhook(request: Request) -> dict[str, str]:
                 log.exception("LINE エラー返信も失敗")
 
     return {}
+
+
+@router.post("/webhook")
+async def line_webhook(request: Request) -> dict[str, str]:
+    return await handle_line_webhook(request)

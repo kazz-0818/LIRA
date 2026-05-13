@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from app.ask_service import month_from_question, run_rules_ask
 from app.audit_supabase import log_audit
 from app.config import get_settings
+from app.line_routes import handle_line_webhook
 from app.line_routes import router as line_router
 from app.llm_ask import answer_with_openai
 from app.llm_context import build_accounting_context
@@ -47,6 +48,8 @@ def _fastapi_kwargs() -> dict:
 
 app = FastAPI(**_fastapi_kwargs())
 app.include_router(line_router)
+# LINE Developers でよくある「/webhook」のみの URL でも 404 にしない
+app.add_api_route("/webhook", handle_line_webhook, methods=["POST"], tags=["line"])
 
 log = logging.getLogger(__name__)
 
