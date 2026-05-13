@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import json
 import logging
+from functools import partial
 from typing import Any
 
 import httpx
@@ -14,8 +15,7 @@ from starlette.concurrency import run_in_threadpool
 from app.audit_supabase import log_audit
 from app.combined_ask import answer_for_user
 from app.config import get_settings
-from app.services import SheetRepository
-from app.sheets_errors import format_sheets_user_message
+from app.sheets_errors import format_sheets_user_message_with_retry_hint
 
 log = logging.getLogger(__name__)
 
@@ -90,21 +90,12 @@ async def handle_line_webhook(request: Request) -> dict[str, str]:
         if not q or not reply_token:
             continue
 
-        def _work(text: str = q) -> str:
-            repo = SheetRepository()
-            return answer_for_user(text, repo)
-
         try:
-            text_out = await run_in_threadpool(_work)
+            text_out = await run_in_threadpool(partial(answer_for_user, q))
             await _reply_line(reply_token, text_out)
         except Exception as e:
             log.exception("LINE webhook 処理エラー")
-            detail = format_sheets_user_message(e)
-            err_reply = (
-                f"{detail}\n\n"
-                "「売上」「入金」「未入金」など短いキーワードでもう一度お試しください。\n"
-                "改善しない場合は時間をおいて再試行してください。"
-            )
+            err_reply = format_sheets_user_message_with_retry_hint(e, line_time_hint=True)
             try:
                 await _reply_line(reply_token, err_reply)
             except Exception:

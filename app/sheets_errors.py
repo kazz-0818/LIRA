@@ -2,6 +2,21 @@ from __future__ import annotations
 
 from googleapiclient.errors import HttpError
 
+RETRY_KEYWORD_HINT = "「売上」「入金」「未入金」など短いキーワードでもう一度お試しください。"
+
+
+def format_sheets_user_message_with_retry_hint(
+    exc: BaseException,
+    *,
+    line_time_hint: bool = False,
+) -> str:
+    """Sheets 系などのユーザー向け文 + 短いキーワードの再試行案内。"""
+    body = format_sheets_user_message(exc)
+    tail = "\n\n" + RETRY_KEYWORD_HINT
+    if line_time_hint:
+        tail += "\n改善しない場合は時間をおいて再試行してください。"
+    return body + tail
+
 
 def format_sheets_user_message(exc: BaseException) -> str:
     """LINE 返信用。秘密は含めない。"""

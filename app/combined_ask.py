@@ -7,7 +7,7 @@ from app.config import get_settings
 from app.llm_ask import answer_with_openai
 from app.llm_context import build_accounting_context
 from app.services import SheetRepository
-from app.sheets_errors import format_sheets_user_message
+from app.sheets_errors import format_sheets_user_message_with_retry_hint
 
 log = logging.getLogger(__name__)
 
@@ -42,9 +42,11 @@ def _fallback_text(structured: dict) -> str:
     return "（ルール応答）売上・入金・支払・未入金・月次 などのキーワードで質問してください。"
 
 
-def answer_for_user(question: str, repo: SheetRepository) -> str:
+def answer_for_user(question: str, repo: SheetRepository | None = None) -> str:
     """人が読む自然文。OpenAI が使えなければルールベースの短文。"""
     try:
+        if repo is None:
+            repo = SheetRepository()
         month = month_from_question(question)
         structured = run_rules_ask(question, repo, month)
         if structured.get("intent") == "greeting":
@@ -59,5 +61,4 @@ def answer_for_user(question: str, repo: SheetRepository) -> str:
         return _fallback_text(structured)
     except Exception as e:
         log.exception("LINE / answer_for_user: Sheets または処理エラー")
-        detail = format_sheets_user_message(e)
-        return f"{detail}\n\n「売上」「入金」「未入金」など短いキーワードでもう一度お試しください。"
+        return format_sheets_user_message_with_retry_hint(e)
