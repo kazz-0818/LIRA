@@ -7,6 +7,7 @@ from app.config import get_settings
 from app.llm_ask import answer_with_openai
 from app.llm_context import build_accounting_context
 from app.services import SheetRepository
+from app.sheets_errors import format_sheets_user_message
 
 log = logging.getLogger(__name__)
 
@@ -56,9 +57,7 @@ def answer_for_user(question: str, repo: SheetRepository) -> str:
             except Exception:
                 log.exception("OpenAI 応答失敗、フォールバックします")
         return _fallback_text(structured)
-    except Exception:
+    except Exception as e:
         log.exception("LINE / answer_for_user: Sheets または処理エラー")
-        return (
-            "経理シートへの接続でエラーが出ました（認証・SPREADSHEET_ID・シート名を確認してください）。\n"
-            "「売上」「入金」「未入金」など短いキーワードでもう一度お試しください。"
-        )
+        detail = format_sheets_user_message(e)
+        return f"{detail}\n\n「売上」「入金」「未入金」など短いキーワードでもう一度お試しください。"

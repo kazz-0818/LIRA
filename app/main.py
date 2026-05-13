@@ -10,11 +10,11 @@ from pydantic import BaseModel, Field
 from app.ask_service import month_from_question, run_rules_ask
 from app.audit_supabase import log_audit
 from app.config import get_settings
-from app.line_routes import handle_line_webhook
-from app.line_routes import router as line_router
+from app.line_routes import handle_line_webhook, router as line_router
 from app.llm_ask import answer_with_openai
 from app.llm_context import build_accounting_context
 from app.parse_util import is_paid_status
+from app.sheets_errors import format_sheets_user_message
 from app.services import (
     SheetRepository,
     monthly_report_text,
@@ -247,15 +247,9 @@ def post_ask(body: AskBody, repo: RepoDep):
     month = month_from_question(body.question)
     try:
         structured = run_rules_ask(body.question, repo, month)
-    except Exception:
+    except Exception as e:
         log.exception("POST /ask: Sheets 読み取り失敗")
-        return {
-            "mode": "error",
-            "message": (
-                "スプレッドシートの読み取りに失敗しました。"
-                "認証・SPREADSHEET_ID・シート名を確認してください。"
-            ),
-        }
+        return {"mode": "error", "message": format_sheets_user_message(e)}
     log_audit(
         "ask",
         {"intent": structured.get("intent"), "month": month},
