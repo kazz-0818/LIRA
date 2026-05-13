@@ -1,18 +1,15 @@
-# Render Blueprint: https://render.com/docs/blueprint-spec
-# ダッシュボードで Environment に秘密（OPENAI / LINE / Supabase / GOOGLE_*）を追加してください。
+# Render Blueprint（Docker: ビルド時 pip と実行時 Python を一致させる）
+# https://render.com/docs/docker
 
 services:
   - type: web
     name: lira
-    runtime: python
+    runtime: docker
     region: oregon
     plan: free
-    buildCommand: pip install -r requirements.txt
-    startCommand: python3 -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    dockerfilePath: ./Dockerfile
     healthCheckPath: /health
     envVars:
-      - key: PYTHON_VERSION
-        value: "3.12.7"
       - key: SPREADSHEET_ID
         sync: false
       - key: GOOGLE_SERVICE_ACCOUNT_JSON
