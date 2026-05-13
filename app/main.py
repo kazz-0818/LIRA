@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from app.ask_service import month_from_question, run_rules_ask
 from app.audit_supabase import log_audit
 from app.config import get_settings
+from app.deployment_info import deployment_revision
 from app.line_routes import handle_line_webhook, router as line_router
 from app.llm_ask import answer_with_openai
 from app.llm_context import build_accounting_context
@@ -57,7 +58,10 @@ log = logging.getLogger(__name__)
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok", "service": "lira"}
+    """LINE で古い定型文が出る場合、ここで git_commit が想定と一致するか確認する。"""
+    out: dict[str, str] = {"status": "ok", "service": "lira"}
+    out.update(deployment_revision())
+    return out
 
 
 def _month_or_default(month: str | None) -> str:
@@ -169,12 +173,12 @@ def get_unpaid(repo: RepoDep):
 
 
 @app.get("/integrations/status")
-def integrations_status() -> dict[str, bool]:
+def integrations_status() -> dict[str, bool | str]:
     s = get_settings()
     google = bool((s.google_service_account_json or "").strip()) or bool(
         (s.google_application_credentials or "").strip()
     )
-    return {
+    out: dict[str, bool | str] = {
         "openai_configured": bool(s.openai_api_key),
         "supabase_configured": bool(
             s.supabase_url and (s.supabase_service_role_key or s.supabase_anon_key)
@@ -183,6 +187,8 @@ def integrations_status() -> dict[str, bool]:
         "public_app_url_configured": bool(s.public_app_url),
         "google_credentials_configured": google,
     }
+    out.update(deployment_revision())
+    return out
 
 
 class MonthlyReportBody(BaseModel):

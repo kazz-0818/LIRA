@@ -92,9 +92,16 @@ async def handle_line_webhook(request: Request) -> dict[str, str]:
 
         try:
             text_out = await run_in_threadpool(partial(answer_for_user, q))
+            if not (text_out or "").strip():
+                text_out = "（応答を生成できませんでした。もう一度お試しください。）"
             await _reply_line(reply_token, text_out)
         except Exception as e:
             log.exception("LINE webhook 処理エラー")
+            log.error(
+                "LINE webhook 例外の要約: type=%s repr=%s",
+                type(e).__name__,
+                repr(e)[:500],
+            )
             err_reply = format_sheets_user_message_with_retry_hint(e, line_time_hint=True)
             try:
                 await _reply_line(reply_token, err_reply)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from googleapiclient.errors import HttpError
+from pydantic import ValidationError
 
 RETRY_KEYWORD_HINT = "「売上」「入金」「未入金」など短いキーワードでもう一度お試しください。"
 
@@ -76,7 +77,16 @@ def format_sheets_user_message(exc: BaseException) -> str:
         fn = getattr(exc, "filename", None) or "（パス不明）"
         return f"認証用 JSON ファイルが見つかりません: {fn}"
 
+    if isinstance(exc, ValidationError):
+        return (
+            "環境変数やリクエストの形式が正しくありません（設定エラー）。\n"
+            "Render の Environment に無効な値が混ざっていないか、"
+            "特に GOOGLE_SERVICE_ACCOUNT_JSON・SPREADSHEET_ID を確認してください。"
+        )
+
     return (
         "経理シートへの接続でエラーが出ました。\n"
-        "認証・SPREADSHEET_ID・シート名（環境変数 SHEET_*）を確認してください。"
+        f"（内部種別: {type(exc).__name__}）\n"
+        "認証・SPREADSHEET_ID・シート名（環境変数 SHEET_*）を確認してください。\n"
+        "Render のログに `LINE webhook 処理エラー` または `answer_for_user` のスタックトレースが出ています。"
     )
