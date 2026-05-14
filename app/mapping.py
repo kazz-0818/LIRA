@@ -50,12 +50,30 @@ def pick(row: dict[str, Any], *keys: str) -> Any:
 
 
 def row_to_monthly_summary(row: dict[str, Any]) -> MonthlySummaryRow | None:
-    mk = parse_month_key(pick(row, "対象月", "月", "対象年月"))
+    mk = parse_month_key(
+        pick(row, "対象月", "月", "対象年月", "年月", "会計月", "期間"),
+    )
     if not mk:
         return None
-    sales = parse_jpy_amount(pick(row, "売上合計", "売上", "売上高"))
-    expenses = parse_jpy_amount(pick(row, "経費合計", "経費", "費用合計"))
-    profit = parse_jpy_amount(pick(row, "利益", "営業利益", "純利益"))
+    sales = parse_jpy_amount(
+        pick(row, "売上合計", "売上", "売上高", "収入", "入金", "売上実績"),
+    )
+    expenses = parse_jpy_amount(
+        pick(
+            row,
+            "経費合計",
+            "経費",
+            "費用合計",
+            "支出",
+            "費用",
+            "原価",
+            "広告費",
+            "外注費",
+        ),
+    )
+    profit = parse_jpy_amount(
+        pick(row, "利益", "営業利益", "純利益", "粗利", "差引", "収支"),
+    )
     margin_raw = pick(row, "利益率", "粗利率")
     margin_rate: float | None = None
     if margin_raw not in (None, ""):
@@ -99,12 +117,33 @@ class ReceivableRow:
 def row_to_receivable(sheet_row_index: int, row: dict[str, Any]) -> ReceivableRow:
     return ReceivableRow(
         sheet_row_index=sheet_row_index,
-        client=((str(pick(row, "クライアント", "顧客", "取引先") or "")).strip() or None),
-        title=((str(pick(row, "案件名", "請求書番号", "件名") or "")).strip() or None),
-        amount=parse_jpy_amount(pick(row, "請求金額", "金額", "請求額")),
-        due_date=parse_date(pick(row, "入金予定日", "予定日")),
-        payment_date=parse_date(pick(row, "入金日", "実入金日")),
-        status=(str(pick(row, "入金ステータス", "ステータス") or "").strip() or None),
+        client=(
+            (
+                str(
+                    pick(
+                        row,
+                        "クライアント",
+                        "顧客",
+                        "取引先",
+                        "スポンサー名",
+                        "スポンサー",
+                    )
+                    or "",
+                )
+            ).strip()
+            or None
+        ),
+        title=(
+            (str(pick(row, "案件名", "請求書番号", "件名", "内容") or "")).strip() or None
+        ),
+        amount=parse_jpy_amount(
+            pick(row, "請求金額", "金額", "請求額", "売上", "契約金額"),
+        ),
+        due_date=parse_date(
+            pick(row, "入金予定日", "予定日", "支払期日", "請求期日"),
+        ),
+        payment_date=parse_date(pick(row, "入金日", "実入金日", "振込日")),
+        status=(str(pick(row, "入金ステータス", "ステータス", "入金状況") or "").strip() or None),
         confirm_check=(str(pick(row, "入金確認チェック", "確認") or "").strip() or None),
         unpaid_flag=pick(row, "未入金フラグ", "未入金"),
         memo=(str(pick(row, "メモ", "備考") or "").strip() or None),
@@ -130,9 +169,28 @@ class PayableRow:
 def row_to_payable(sheet_row_index: int, row: dict[str, Any]) -> PayableRow:
     return PayableRow(
         sheet_row_index=sheet_row_index,
-        due_date=parse_date(pick(row, "支払予定日", "予定日")),
-        vendor=(str(pick(row, "支払先", "取引先", "支払先名") or "").strip() or None),
-        amount=parse_jpy_amount(pick(row, "支払金額", "金額")),
-        status=(str(pick(row, "支払ステータス", "ステータス") or "").strip() or None),
+        due_date=parse_date(
+            pick(row, "支払予定日", "予定日", "日付", "支払日", "請求日"),
+        ),
+        vendor=(
+            str(
+                pick(
+                    row,
+                    "支払先",
+                    "取引先",
+                    "支払先名",
+                    "項目",
+                    "内容",
+                    "仕入先",
+                    "外注先",
+                )
+                or "",
+            ).strip()
+            or None
+        ),
+        amount=parse_jpy_amount(
+            pick(row, "支払金額", "金額", "経費", "支払額", "税込金額"),
+        ),
+        status=(str(pick(row, "支払ステータス", "ステータス", "状況") or "").strip() or None),
         memo=((str(pick(row, "メモ", "備考") or "")).strip() or None),
     )

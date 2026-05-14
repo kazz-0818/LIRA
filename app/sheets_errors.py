@@ -55,12 +55,14 @@ def format_sheets_user_message(exc: BaseException) -> str:
                 "Render では GOOGLE_SERVICE_ACCOUNT_JSON（JSON 全文）、"
                 "または GOOGLE_APPLICATION_CREDENTIALS（ファイルパス）を設定してください。"
             )
-        if "シートの自動判定に失敗" in text:
+        if "シートの自動判定に失敗" in text or "自動判定に失敗" in text:
             return (
-                "どのタブを月次・入金・支払用として読むか、自動判定できませんでした。\n"
-                f"{text}\n"
-                "タブ名に「月次」「サマリー」「入金」「支払」などが含まれるか確認するか、"
-                "環境変数 SHEET_* に実タブ名をそのまま設定してください。"
+                "LIRA経理部です。\n"
+                "BRANDVOX経理ファイルには接続できていますが、どのタブを「売上・入金・支払い」として読むかの判定で止まりました。\n\n"
+                "管理者側では GET /debug/sheets でタブ診断を確認し、"
+                "SHEET_SUMMARY / SHEET_RECEIVABLES / SHEET_PAYABLES を"
+                "実タブ名に合わせてください。\n\n"
+                f"（技術メモ）{text[:400]}"
             )
         if "スプレッドシートにタブ（シート）が1枚もありません" in text:
             return (
@@ -88,5 +90,5 @@ def format_sheets_user_message(exc: BaseException) -> str:
         "経理シートへの接続でエラーが出ました。\n"
         f"（内部種別: {type(exc).__name__}）\n"
         "認証・SPREADSHEET_ID・シート名（環境変数 SHEET_*）を確認してください。\n"
-        "Render のログに `LINE webhook 処理エラー` または `answer_for_user` のスタックトレースが出ています。"
+        "Render のログに webhook / answer_for_user のスタックトレースが出ていることがあります。"
     )

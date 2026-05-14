@@ -5,6 +5,8 @@ from datetime import date
 from typing import Any, Literal
 
 from app.config import Settings, get_settings
+from app.header_detect import detect_header_row_index
+from app.horizontal_summary import extract_horizontal_monthly, looks_like_horizontal_month_header
 from app.mapping import (
     MonthlySummaryRow,
     PayableRow,
@@ -14,7 +16,8 @@ from app.mapping import (
     row_to_receivable,
     rows_to_dicts,
 )
-from app.sheet_resolve import resolve_effective_sheet_names
+from app.parse_util import parse_month_key_from_cell
+from app.sheet_resolve import SheetResolution, resolve_effective_sheet_names_best_effort
 from app.sheets_client import build_sheets_service, fetch_range, list_sheet_titles
 
 
@@ -23,7 +26,8 @@ def _escape_sheet(name: str) -> str:
 
 
 def _full_grid_range(sheet: str, last_row: int) -> str:
-    return f"{_escape_sheet(sheet)}!A1:Z{last_row}"
+    # 横持ち月次は列が Z を超えることがある
+    return f"{_escape_sheet(sheet)}!A1:ZZ{last_row}"
 
 
 def _is_blank_row(row: dict[str, Any]) -> bool:
@@ -31,22 +35,52 @@ def _is_blank_row(row: dict[str, Any]) -> bool:
 
 
 class SheetRepository:
-    def __init__(self, settings: Settings | None = None):
+    def __init__(
+        self,
+        settings: Settings | None = None,
+        *,
+        _service: Any | None = None,
+        _titles: list[str] | None = None,
+        _resolution: SheetResolution | None = None,
+    ):
         self.settings = settings or get_settings()
-        self._service = build_sheets_service()
-        titles = list_sheet_titles(self._service, self.settings.spreadsheet_id)
-        self._sheet_summary, self._sheet_receivables, self._sheet_payables = (
-            resolve_effective_sheet_names(self.settings, titles)
+        self._service = _service or build_sheets_service()
+        self._titles = _titles if _titles is not None else list_sheet_titles(
+            self._service,
+            self.settings.spreadsheet_id,
         )
+        self._resolution = _resolution or resolve_effective_sheet_names_best_effort(
+            self.settings,
+            self._titles,
+        )
+        rs = self._resolution["resolved_sheets"]
+        self.resolved_sheets: dict[str, str | None] = dict(rs)
+        self.warnings: list[str] = list(self._resolution["warnings"])
+        self._sheet_summary = rs.get("summary")
+        self._sheet_receivables = rs.get("receivables")
+        self._sheet_payables = rs.get("payables")
 
-    def _read_sheet(self, sheet_name: str) -> list[dict[str, Any]]:
-        return [row for _, row in self._read_sheet_with_row_numbers(sheet_name)]
-
-    def _read_sheet_with_row_numbers(self, sheet_name: str) -> list[tuple[int, dict[str, Any]]]:
+    def _fetch_raw(self, sheet: str | None) -> list[list[Any]]:
+        if not sheet:
+            return []
         s = self.settings
-        rng = _full_grid_range(sheet_name, s.max_data_rows)
-        values = fetch_range(self._service, s.spreadsheet_id, rng)
-        header_idx = s.header_row - 1
+        rng = _full_grid_range(sheet, s.max_data_rows)
+        return fetch_range(self._service, s.spreadsheet_id, rng)
+
+    def _header_idx(self, sheet: str, values: list[list[Any]]) -> int:
+        fb = self.settings.header_row - 1
+        if not self.settings.header_row_auto:
+            return max(0, min(fb, max(0, len(values) - 1)))
+        idx, _sc = detect_header_row_index(values, max_scan=20, min_score=4, fallback_index=fb)
+        return max(0, min(idx, max(0, len(values) - 1)))
+
+    def _read_sheet_with_row_numbers(self, sheet: str | None) -> list[tuple[int, dict[str, Any]]]:
+        if not sheet:
+            return []
+        values = self._fetch_raw(sheet)
+        if not values:
+            return []
+        header_idx = self._header_idx(sheet, values)
         _, dict_rows = rows_to_dicts(values, header_idx)
         pairs: list[tuple[int, dict[str, Any]]] = []
         for i, row in enumerate(dict_rows):
@@ -56,9 +90,40 @@ class SheetRepository:
             pairs.append((sheet_row, row))
         return pairs
 
-    def load_summary_rows(self) -> list[MonthlySummaryRow]:
+    def _load_summary_rows_horizontal(self, values: list[list[Any]]) -> list[MonthlySummaryRow]:
         out: list[MonthlySummaryRow] = []
-        for row in self._read_sheet(self._sheet_summary):
+        for h in range(min(20, len(values))):
+            if not looks_like_horizontal_month_header(values, h):
+                continue
+            header = values[h]
+            months: list[str] = []
+            for cell in header:
+                mk = parse_month_key_from_cell(cell)
+                if mk and mk not in months:
+                    months.append(mk)
+            for mk in months:
+                m = extract_horizontal_monthly(values, h, mk)
+                if m:
+                    out.append(m)
+            if out:
+                return out
+        return out
+
+    def load_summary_rows(self) -> list[MonthlySummaryRow]:
+        if not self._sheet_summary:
+            return []
+        values = self._fetch_raw(self._sheet_summary)
+        if not values:
+            return []
+        horiz = self._load_summary_rows_horizontal(values)
+        if horiz:
+            return horiz
+        header_idx = self._header_idx(self._sheet_summary, values)
+        _, dict_rows = rows_to_dicts(values, header_idx)
+        out: list[MonthlySummaryRow] = []
+        for row in dict_rows:
+            if _is_blank_row(row):
+                continue
             m = row_to_monthly_summary(row)
             if m:
                 out.append(m)
@@ -111,7 +176,7 @@ def monthly_report_text(
         return (
             f"[LIRA 内部メモ]\n"
             f"{body}\n"
-            f"※数値はスプレッドシート `月次サマリー` 行の値に基づきます。"
+            f"※数値はスプレッドシートの月次・実績系タブの値に基づきます。"
             f"差異があれば原票を確認してください。"
         )
     return (

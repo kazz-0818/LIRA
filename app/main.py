@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from datetime import date
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -11,11 +11,11 @@ from app.ask_service import month_from_question, run_rules_ask
 from app.audit_supabase import log_audit
 from app.config import get_settings
 from app.deployment_info import deployment_revision
-from app.line_routes import handle_line_webhook, router as line_router
+from app.line_routes import handle_line_webhook
+from app.line_routes import router as line_router
 from app.llm_ask import answer_with_openai
 from app.llm_context import build_accounting_context
 from app.parse_util import is_paid_status
-from app.sheets_errors import format_sheets_user_message
 from app.services import (
     SheetRepository,
     monthly_report_text,
@@ -24,6 +24,10 @@ from app.services import (
     serialize_payable,
     serialize_receivable,
 )
+from app.sheet_debug import build_sheets_debug
+from app.sheet_resolve import resolve_effective_sheet_names_best_effort
+from app.sheets_client import build_sheets_service, list_sheet_titles
+from app.sheets_errors import format_sheets_user_message
 
 Audience = Literal["internal", "client"]
 
@@ -33,6 +37,13 @@ def get_repo() -> SheetRepository:
 
 
 RepoDep = Annotated[SheetRepository, Depends(get_repo)]
+
+
+def _reading_scope_notice(repo: SheetRepository) -> str:
+    if not repo.warnings:
+        return ""
+    lines = "\n".join(f"・{w}" for w in repo.warnings[:6])
+    return f"読める範囲で回答します。\n{lines}\n\n"
 
 
 def _fastapi_kwargs() -> dict:
@@ -57,11 +68,52 @@ log = logging.getLogger(__name__)
 
 
 @app.get("/health")
-def health() -> dict[str, str]:
-    """LINE で古い定型文が出る場合、ここで git_commit が想定と一致するか確認する。"""
-    out: dict[str, str] = {"status": "ok", "service": "lira"}
+def health() -> dict[str, Any]:
+    """Render 上で Sheets 接続・タブ解決まで含めた状態を返す。"""
+    s = get_settings()
+    out: dict[str, Any] = {
+        "status": "ok",
+        "service": "lira",
+        "google_credentials_configured": bool((s.google_service_account_json or "").strip())
+        or bool((s.google_application_credentials or "").strip()),
+        "spreadsheet_id_configured": bool((s.spreadsheet_id or "").strip()),
+        "spreadsheet_access_ok": False,
+        "sheet_titles": [],
+        "resolved_sheets": {},
+        "sheet_resolution_warnings": [],
+        "openai_configured": bool(s.openai_api_key),
+        "supabase_configured": bool(
+            s.supabase_url and (s.supabase_service_role_key or s.supabase_anon_key),
+        ),
+        "line_configured": bool(s.line_channel_secret and s.line_channel_access_token),
+    }
     out.update(deployment_revision())
+    try:
+        svc = build_sheets_service()
+        titles = list_sheet_titles(svc, s.spreadsheet_id)
+        out["spreadsheet_access_ok"] = True
+        out["sheet_titles"] = titles
+        res = resolve_effective_sheet_names_best_effort(s, titles)
+        out["resolved_sheets"] = res["resolved_sheets"]
+        out["sheet_resolution_warnings"] = res["warnings"]
+    except Exception as e:
+        out["spreadsheet_access_error"] = f"{type(e).__name__}: {e!s}"[:500]
     return out
+
+
+@app.get("/debug/sheets")
+def debug_sheets(debug: bool = Query(False, description="true で spreadsheet_id をマスクせず返す")):
+    """タブ一覧・先頭行プレビュー・ヘッダー候補・ロールスコア・解決結果の診断。"""
+    s = get_settings()
+    try:
+        svc = build_sheets_service()
+        titles = list_sheet_titles(svc, s.spreadsheet_id)
+        return build_sheets_debug(s, titles, svc, s.spreadsheet_id, debug=debug)
+    except Exception as e:
+        return {
+            "error": format_sheets_user_message(e),
+            "spreadsheet_id": s.spreadsheet_id if debug else "***",
+        }
 
 
 def _month_or_default(month: str | None) -> str:
@@ -267,10 +319,18 @@ def post_ask(body: AskBody, repo: RepoDep):
         try:
             ctx = build_accounting_context(repo, month)
             answer = answer_with_openai(body.question, ctx)
-            return {"mode": "openai", "answer": answer, "structured": structured}
+            return {
+                "mode": "openai",
+                "answer": _reading_scope_notice(repo) + answer,
+                "structured": structured,
+            }
         except Exception:
             log.exception("OpenAI /ask が失敗したためルール結果を返します")
-    return {"mode": "rules", **structured}
+    notice = _reading_scope_notice(repo)
+    out: dict[str, Any] = {"mode": "rules", **structured}
+    if notice.strip():
+        out["reading_scope_notice"] = notice.strip()
+    return out
 
 
 if __name__ == "__main__":

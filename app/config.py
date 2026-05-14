@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     sheet_receivables: str = Field(default="入金予定", alias="SHEET_RECEIVABLES")
     sheet_payables: str = Field(default="支払予定", alias="SHEET_PAYABLES")
     header_row: int = Field(default=1, ge=1, alias="HEADER_ROW")
+    header_row_auto: bool = Field(default=True, alias="HEADER_ROW_AUTO")
     data_start_row: int = Field(default=2, ge=1, alias="DATA_START_ROW")
     max_data_rows: int = Field(default=5000, ge=1, alias="MAX_DATA_ROWS")
 

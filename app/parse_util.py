@@ -6,6 +6,8 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 _MONTH_RE = re.compile(r"^(\d{4})[-/](\d{1,2})$")
+# 列ヘッダ等: 2026/3, 2026.3, 2026年3月, 2026-03
+_MONTH_CELL_RE = re.compile(r"(20\d{2})\s*[/./年-]\s*(\d{1,2})")
 
 
 def parse_jpy_amount(raw: Any) -> int | None:
@@ -44,6 +46,21 @@ def parse_date(raw: Any) -> date | None:
     except ValueError:
         pass
     return None
+
+
+def parse_month_key_from_cell(raw: Any) -> str | None:
+    """セル文字列から YYYY-MM を推定（横持ち月次の列見出し用）。"""
+    if raw is None:
+        return None
+    s = str(raw).strip()
+    if not s:
+        return None
+    m = _MONTH_CELL_RE.search(s)
+    if m:
+        y, mo = int(m.group(1)), int(m.group(2))
+        if 1 <= mo <= 12:
+            return f"{y:04d}-{mo:02d}"
+    return parse_month_key(s)
 
 
 def parse_month_key(raw: Any) -> str | None:
